@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+#
+# Author: Alalilacias
+# Description: Checks for available drives and allows the user to choose on which to backup the directory.
+# Syntax: ./driver.backup
+# Version: 0.1
+
+# Define backup directory's name
+DRIVE_BACKUP_DIR_NAME="dotfiles-backup"
+
+# Function to detect mounted drives, it filters undesired types
+detect_mounted_drives() {
+	# Notify user of script initialization
+    	echo "Detecting mounted drives..."
+	# Define constant and populate with all mounted drives
+    	MOUNT_POINTS=($(lsblk -o MOUNTPOINT -n -l | grep -v "^$" | grep -v "/boot" | grep -v "/home" | grep -v "/efi"))
+    	# Check if there's any, notify and exit if not
+	if [ ${#MOUNT_POINTS[@]} -eq 0 ]; then
+        	echo "No mounted drives detected. Please mount a drive and try again."
+        	exit 1
+    	fi
+
+	# Notify user of available mounts by looping through array and extracting useful information
+	# Information printed is name, storage capacity, format type and location
+    	echo "Available mount points:"
+    	for i in "${!MOUNT_POINTS[@]}"; do
+        	MOUNT_POINT="${MOUNT_POINTS[$i]}"
+        	DRIVE_INFO=$(lsblk -o NAME,SIZE,FSTYPE,MOUNTPOINT | grep "$MOUNT_POINT$")
+        	echo "$((i+1)): $DRIVE_INFO"
+    	done
+
+	# Request input of the user to choose the mount from the array
+    	echo "Please select a mount point (1-${#MOUNT_POINTS[@]}):"
+    	read -r SELECTION
+    	if [[ "$SELECTION" -lt 1 || "$SELECTION" -gt "${#MOUNT_POINTS[@]}" ]]; then
+        	echo "Invalid selection. Exiting."
+        	exit 1
+    	fi
+
+	# Notifies the user of their choice and extracts from array
+    	SELECTED_MOUNT="${MOUNT_POINTS[$((SELECTION-1))]}"
+	echo "You selected: $SELECTED_MOUNT"
+}
+
+# Execution start
+detect_mounted_drives
+
+# Check if selected mount is valid
+if ! mountpoint -q "$SELECTED_MOUNT"; then
+    	echo "The selected mount point ($SELECTED_MOUNT) is not valid. Please check and try again."
+	exit 1
+fi
+
+# Define backup directory and create if it doesn't exist
+BACKUP_DIR="$SELECTED_MOUNT/$DRIVE_BACKUP_DIR_NAME"
+mkdir -p "$BACKUP_DIR"
+
+# Notify user of and synchronize .dotfiles to selected drive
+echo "Backing up .dotfiles to $BACKUP_DIR..."
+rsync -av --delete ~/.dotfiles/ "$BACKUP_DIR/"
+
+# Notify user of finalization
+echo "Backup complete. Your .dotfiles are now stored on the selected drive."

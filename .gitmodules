@@ -1,0 +1,6 @@
+[submodule "submodules/xdg-ninja"]
+	path = submodules/xdg-ninja
+	url = https://github.com/b3nj5m1n/xdg-ninja.git
+[submodule "/home/alalin/.dotfiles/submodules/yq"]
+	path = /home/alalin/.dotfiles/submodules/yq
+	url = https://github.com/mikefarah/yq.git
