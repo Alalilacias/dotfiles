@@ -6,7 +6,7 @@
 # Version: 0.1
 
 # Array of critical apps to check. Currently limited, might expand in the future.
-CRITICAL_APPS=( "git" )  # Corrected array definition
+CRITICAL_APPS=( "git" "kitty" )  # Corrected array definition
 
 # Function to check if an app is installed
 is_app_installed() {
