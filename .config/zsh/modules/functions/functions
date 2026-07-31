@@ -50,41 +50,124 @@ timezsh() {
   repeat 10 /usr/bin/time "$shell" -i -c exit # Run the timing test 10 times
 }
 
-###############################################################################
-# Temporary functions for OhMyTodo
-###############################################################################
-omysize() {
-  local environment=$1
-  local images=()
-  local total_mb=0
+# --- Git workflow helpers ---
 
-  case "$environment" in
-  original)
-    images=("ohmytodo-app" "postgres:16" "redis:7")
-    ;;
-  alpine)
-    images=("ohmytodo-app" "postgres:16-alpine" "redis:7-alpine")
-    ;;
-  current)
-    images=("ohmytodo-app" "postgres:16-alpine")
-    ;;
-  *)
-    echo "Unkown environment: $environment"
-    exit 1
-    ;;
-  esac
+get_merged_and_existing_features() {
+  local quiet=false
+  local detailed=false
+  local tag_depth=1
 
-  printf "%-20s %-10s\n" "IMAGE" "SIZE"
-
-  for image in "${images[@]}"; do
-    local size=$(docker image ls "$image" --format "{{.Size}}")
-    local size_num=$(echo "$size" | grep -Eo '^[0-9.]+')
-
-    total_mb=$(echo "$total_mb + $size_num" | bc)
-
-    printf "%-20s %-10s\n" "$image" "$size"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+    --quiet)
+      quiet=true
+      shift
+      ;;
+    --detailed)
+      detailed=true
+      shift
+      ;;
+    --tag-depth)
+      tag_depth="$2"
+      shift 2
+      ;;
+    *) shift ;;
+    esac
   done
 
-  echo
-  printf "%-20s %-10s\n" "TOTAL" "${total_mb}MB"
+  local latest_tag=""
+  if [[ "$tag_depth" -gt 0 ]]; then
+    latest_tag=$(git describe --tags --abbrev=0 --skip=$((tag_depth - 1)) 2>/dev/null)
+  fi
+
+  local range="HEAD"
+  if [[ -z "$latest_tag" ]]; then
+    [[ "$quiet" == false ]] && echo -e "\033[33mNo tags found or tags ignored. Scanning all history...\033[0m"
+  else
+    [[ "$quiet" == false ]] && echo -e "\033[36mScanning merges since tag: $latest_tag\033[0m"
+    range="${latest_tag}..HEAD"
+  fi
+
+  # 1. Collect and deduplicate branch names from merge commits
+  local branches
+  branches=$(git log "$range" --merges --format="%s" |
+    sed -n "s/Merge branch '\(.*\)' into.*/\1/p" |
+    sort -u)
+
+  # 2. Iterate and verify existence
+  while IFS= read -r branch_name; do
+    [[ -z "$branch_name" ]] && continue
+
+    local is_excluded=false
+    case "$branch_name" in
+    main | master | develop) is_excluded=true ;;
+    esac
+
+    local exists=""
+    if [[ "$is_excluded" == false ]]; then
+      exists=$(git branch --list "$branch_name")
+    fi
+
+    if [[ -n "$exists" ]]; then
+      if [[ "$quiet" == true ]]; then
+        echo "$branch_name"
+      else
+        echo -e "\033[32m[ACTIVE] $branch_name\033[0m"
+      fi
+    elif [[ "$detailed" == true && "$quiet" == false ]]; then
+      echo -e "\033[90m[DELETED] $branch_name\033[0m"
+    fi
+  done <<<"$branches"
+}
+
+end_branch() {
+  local current_branch
+  current_branch=$(git rev-parse --abbrev-ref HEAD)
+
+  if [[ "$current_branch" == "main" ]]; then
+    echo "Already on main branch, nothing to end." >&2
+    return 1
+  fi
+
+  git add .
+  git commit
+
+  git push origin "$current_branch"
+
+  git checkout main
+  git pull origin main
+  git merge "$current_branch"
+
+  git push origin main
+
+  git branch -d "$current_branch"
+  git push origin --delete "$current_branch"
+
+  echo -e "\033[32mBranch '$current_branch' has been merged into main and deleted locally & remotely.\033[0m"
+}
+
+# Courtesy of https://stackoverflow.com/questions/30590083/git-how-to-rename-a-branch-both-local-and-remote
+rename_branch() {
+  if [[ $# -ne 2 ]]; then
+    echo "Usage: rename_branch <old> <new>" >&2
+    return 1
+  fi
+  local old="$1"
+  local new="$2"
+  local remote="origin"
+
+  # Rename the local branch to the new name
+  git branch -m "$old" "$new"
+
+  # Delete the old branch on remote
+  git push "$remote" --delete "$old"
+
+  # Prevent git from using the old name when pushing in the next step.
+  git branch --unset-upstream "$new"
+
+  # Push the new branch to remote
+  git push "$remote" "$new"
+
+  # Reset the upstream branch for the new_name local branch
+  git push "$remote" -u "$new"
 }
