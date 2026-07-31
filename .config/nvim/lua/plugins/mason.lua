@@ -14,7 +14,6 @@ return {
       "hadolint",
       "luacheck",
       "cmakelang",
-      "rustfmt",
     },
   },
 }

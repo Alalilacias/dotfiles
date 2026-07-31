@@ -45,6 +45,8 @@ alias nfunctions='nvim ~/.dotfiles/.config/zsh/modules/functions/functions'
 # Git
 alias ga='git add'
 alias gaa='git add .'
+alias gac='gaa && gc'
+alias gacpo='gaa && gc && gpo'
 alias gaf='git add -f'
 alias gb='git branch'
 alias gbd='git branch -d'
